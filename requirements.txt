@@ -1,3 +1,4 @@
 streamlit
 langchain
 newsapi-python
+openai-python
