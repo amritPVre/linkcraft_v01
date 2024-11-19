@@ -1,4 +1,5 @@
 streamlit
-langchain
 newsapi-python
+langchain
 openai
+python-dateutil
