@@ -1,10 +1,11 @@
-# Import necessary libraries
 import streamlit as st
 import datetime
 from newsapi import NewsApiClient
 from langchain.chat_models import ChatOpenAI
 
+
 def linkcraft():
+    #st.title("LinkCraft - AI-Powered LinkedIn & Slide Content Generator")
     # Set up the Streamlit app
     col1, col2, col3 = st.columns(3)
     col2.title("LinkCraft")
@@ -16,11 +17,11 @@ def linkcraft():
         """
         Welcome to 🌐 LinkCraft, your premier AI-driven tool for crafting LinkedIn content. 
         Designed for professionals and thought leaders, LinkCraft transforms trending news headlines into 
-        insightful LinkedIn posts. 📊 Select an industry, choose a headline, and receive a post tailored for the LinkedIn audience, 
-        echoing the styles of industry influencers. 🚀
+        insightful LinkedIn posts and now also creates slides! 📊 Select an industry, choose a headline, 
+        and receive both a LinkedIn post and slides tailored to the LinkedIn audience. 🚀
         """
     )
-    
+
     # Initialize API clients
     try:
         NEWS_API_KEY = st.secrets["NEWS_API"]["api_key"]
@@ -31,6 +32,16 @@ def linkcraft():
         st.error(f"Missing API key: {e}")
         return
 
+    # Ensure session state variables exist
+    if "news_headlines" not in st.session_state:
+        st.session_state.news_headlines = []
+    if "selected_news" not in st.session_state:
+        st.session_state.selected_news = None
+    if "generated_post" not in st.session_state:
+        st.session_state.generated_post = ""
+    if "slide_content" not in st.session_state:
+        st.session_state.slide_content = []
+
     # Industry selection
     industries = [
         'automobile', 'e-vehicle', 'renewable energy', 'technology',
@@ -38,29 +49,18 @@ def linkcraft():
         'entertainment', 'sports', 'real estate', 'education',
         'agriculture', 'fashion', 'travel', 'food & beverages',
     ]
-    col1, col2, col3 = st.columns([0.5, 1.5, 0.5])
-    col2.subheader('Select a News Segment')
-    selected_industry = col2.selectbox('', industries)
-
+    selected_industry = st.selectbox('Select a News Segment:', industries)
+    
     # Date range selection
-    st.subheader('Select a Date Range for the Top 10 Trending News Headlines')
     today = datetime.date.today()
-    col1, col2 = st.columns(2)
-    start_date = col1.date_input('Start Date', min_value=today - datetime.timedelta(days=7), value=today - datetime.timedelta(days=7))
-    end_date = col2.date_input('End Date', min_value=start_date)
+    start_date = st.date_input('Start Date', min_value=today - datetime.timedelta(days=7), value=today - datetime.timedelta(days=7))
+    end_date = st.date_input('End Date', min_value=start_date)
     if start_date > end_date:
         st.error("Start date must be earlier than or equal to the end date.")
         return
 
-    # Initialize session states
-    if 'selected_news' not in st.session_state:
-        st.session_state.selected_news = None
-    if 'news_headlines' not in st.session_state:
-        st.session_state.news_headlines = []
-
     # Fetch headlines
-    col1, col2, col3 = st.columns(3)
-    if col2.button("Fetch Headlines"):
+    if st.button("Fetch Headlines"):
         try:
             news_articles = newsapi.get_everything(
                 q=selected_industry,
@@ -71,8 +71,6 @@ def linkcraft():
                 page_size=10
             )
             st.session_state.news_headlines = [article['title'] for article in news_articles['articles']]
-            if not st.session_state.news_headlines:
-                st.warning("No headlines found for the selected industry and date range.")
         except Exception as e:
             st.error(f"Error fetching headlines: {e}")
 
@@ -84,14 +82,54 @@ def linkcraft():
     if st.session_state.selected_news and st.button("Generate LinkedIn Post"):
         try:
             linkedin_prompt = f"""
-            Craft an engaging LinkedIn post within 1000 words based on the provided news headline:
-            "{st.session_state.selected_news}". The post should target {selected_industry} professionals. 
-            Use statistical data, bullet points, and a captivating hook. Incorporate emojis where appropriate.
+            Create a professional LinkedIn post based on the headline: "{st.session_state.selected_news}".
+            Include insights, trends, and industry-specific points in an engaging style.
             """
             response = llm.predict(linkedin_prompt)
-            st.text_area("Generated LinkedIn Post:", response, height=400)
+            st.session_state.generated_post = response
         except Exception as e:
             st.error(f"Error generating LinkedIn post: {e}")
+
+    # Display the generated post
+    if st.session_state.generated_post:
+        st.text_area("Generated LinkedIn Post:", st.session_state.generated_post, height=400)
+
+    # Generate slide content and image prompts
+    if st.session_state.generated_post and st.button("Generate Slide Content and Image Prompts"):
+        try:
+            slide_prompt = f"""
+            Break the following LinkedIn post into structured slides. Each slide should include:
+            - Title
+            - Bullet points summarizing the content
+            - A descriptive image prompt for generating a suitable image
+            Ensure the format is consistent and clear. Here's the LinkedIn post:
+            {st.session_state.generated_post}
+            """
+            slide_response = llm.predict(slide_prompt)
+
+            # Parse slide content
+            slides = []
+            for slide in slide_response.split("\n\n"):
+                if "Image Prompt:" in slide:
+                    title_and_content, image_prompt = slide.split("Image Prompt:")
+                    title, *points = title_and_content.strip().split("\n")
+                    slides.append({
+                        "title": title.strip(),
+                        "points": [point.strip() for point in points if point.strip()],
+                        "image_prompt": image_prompt.strip()
+                    })
+            st.session_state.slide_content = slides
+        except Exception as e:
+            st.error(f"Error generating slide content and prompts: {e}")
+
+    # Display slides and prompts
+    if st.session_state.slide_content:
+        for i, slide in enumerate(st.session_state.slide_content, start=1):
+            st.subheader(f"Slide {i}: {slide['title']}")
+            for point in slide["points"]:
+                st.write(f"- {point}")
+            st.markdown(f"**Image Prompt:** {slide['image_prompt']}")
+
 
 # Run the app
 if __name__ == "__main__":
