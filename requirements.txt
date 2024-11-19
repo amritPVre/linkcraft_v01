@@ -3,3 +3,4 @@ newsapi-python
 langchain
 openai
 python-dateutil
+langchain-community
